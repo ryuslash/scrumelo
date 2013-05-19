@@ -1,0 +1,3 @@
+* Scrumelo
+
+  Scrum in org-mode with Emacs and Elnode.
