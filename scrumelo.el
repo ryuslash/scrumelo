@@ -15,12 +15,12 @@
 
 ;;; Code:
 
-(defvar scrum-project-file "~/projects/scrumelo/aeos.org"
-  "The file containing the scrumm backlog.")
+(defvar scrumelo-project-file "~/projects/scrumelo/aeos.org"
+  "The file containing the scrum backlog.")
 
 (defun scrumelo-backlog-page (httpcon)
   "Send the backlog overview over HTTPCON."
-  (let ((buffer (find-file-noselect scrum-project-file)))
+  (let ((buffer (find-file-noselect scrumelo-project-file)))
     (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
     (elnode-http-return
      httpcon
