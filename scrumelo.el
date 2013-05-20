@@ -34,6 +34,14 @@
   "http://code.jquery.com/jquery-2.0.0.min.js"
   "The location of the jQuery JS file.")
 
+(defmacro with-scrumelo-http-params (params httpcon &rest body)
+  "Bind parameters PARAMS from HTTPCON and execute BODY."
+  `(let (,@(mapcar (lambda (p)
+                     `(,p (elnode-http-param ,httpcon ,(symbol-name p))))
+                   params))
+     ,@body))
+(put 'with-scrumelo-http-params 'lisp-indent-function 2)
+
 (defun scrumelo--css (href)
   "Return a link pointing to HREF."
   `(link (@ (href ,href) (rel "stylesheet") (type "text/css"))))
@@ -88,6 +96,25 @@
   `(table (@ (class "table table-striped"))
           ,@(scrumelo--inner-story-table buffer)))
 
+(defun scrumelo--new-story-form ()
+  "Create a form for adding new stories."
+  `(form (@ (method "POST")
+            (action "/stories/new/"))
+         (fieldset
+          (legend "New story")
+          (div (@ (style "text-align: center;"))
+               (div (@ (class "input-prepend input-append"))
+                    (span (@ (class "add-on")) "As a ")
+                    (input (@ (class "input-medium") (type "text")
+                              (name "role")))
+                    (span (@ (class "add-on")) " I ")
+                    (input (@ (class "input-mini") (type "text")
+                              (name "necessity")))
+                    (span (@ (class "add-on")) " to ")
+                    (input (@ (class "input-xxlarge") (type "text")
+                              (name "headline")))
+                    (button (@ (class "btn") (type "submit")) "!"))))))
+
 (defun scrumelo-backlog-page (httpcon)
   "Send the backlog overview over HTTPCON."
   (let ((buffer (find-file-noselect scrumelo-project-file)))
@@ -102,13 +129,29 @@
                     ,@(scrumelo--js-list))
               (body
                (div (@ (class "container"))
-                    ,(scrumelo--story-table buffer)))))))))
+                    ,(scrumelo--story-table buffer)
+                    ,(scrumelo--new-story-form)))))))))
+
+(defun scrumelo-new-story (httpcon)
+  "Parse data from HTTPCON and write a new scrum story using it."
+  (elnode-method httpcon
+    (POST
+     (let ((buffer (find-file-noselect scrumelo-project-file)))
+       (with-scrumelo-http-params (role necessity headline) httpcon
+         (with-current-buffer buffer
+           (goto-char (point-max))
+           (insert "\n* TODO " headline)
+           (org-set-property "Role" role)
+           (org-set-property "Necessity" necessity)
+           (save-buffer))))
+     (elnode-send-redirect httpcon "/"))))
 
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
   (elnode-dispatcher
    httpcon
-   '(("^/$" . scrumelo-backlog-page))))
+   '(("^/$" . scrumelo-backlog-page)
+     ("^/stories/new/$" . scrumelo-new-story))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "localhost")
 
