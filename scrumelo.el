@@ -59,10 +59,18 @@
           (org-entry-get (point) "Necessity")
           (nth 4 (org-heading-components))))
 
+(defun scrumelo--task-state-class (state)
+  "Return the correct icon class for STATE."
+  (cdr (assoc state '(("TODO" . "icon-check-empty")
+                      ("DOING" . "icon-sign-blank")
+                      ("DONE" . "icon-check")))))
+
 (defun scrumelo--story-row ()
   "Return a table row for the current org headline."
-  `(tr (td ,(org-entry-get (point) "TODO"))
-       (td ,(scrumelo--story))))
+  (let ((state (org-entry-get (point) "TODO")))
+    `(tr (td (i (@ (class ,(scrumelo--task-state-class state))) "")
+             " " ,state)
+         (td ,(scrumelo--story)))))
 
 (defun scrumelo--maybe-story-row ()
   "If looking at a top level heading, return a table row for it."
