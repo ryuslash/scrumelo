@@ -59,7 +59,8 @@
 (defun scrumelo--js-list ()
   "Return a list of all required JS files."
   (list (scrumelo--js scrumelo-bootstrap-js-location)
-        (scrumelo--js scrumelo-jquery-js-location)))
+        (scrumelo--js scrumelo-jquery-js-location)
+        (scrumelo--js "js/scrumelo.js")))
 
 (defun scrumelo--story ()
   "Return a description of the current org heading as a scrum story."
@@ -101,8 +102,11 @@
   `(form (@ (method "POST")
             (action "/stories/new/"))
          (fieldset
-          (legend "New story")
-          (div (@ (style "text-align: center;"))
+          (legend (@ (class "toggle")
+                     (data-show "new-story")) "New story")
+          (div (@ (id "new-story")
+                  (class "hide")
+                  (style "text-align: center;"))
                (div (@ (class "input-prepend input-append"))
                     (span (@ (class "add-on")) "As a ")
                     (input (@ (class "input-medium") (type "text")
@@ -150,7 +154,8 @@
   "Send the right requests in HTTPCON to the right functions."
   (elnode-dispatcher
    httpcon
-   '(("^/$" . scrumelo-backlog-page)
+   `(("^/$" . scrumelo-backlog-page)
+     ("^/js/scrumelo.js" . ,(elnode-make-send-file "js/scrumelo.js"))
      ("^/stories/new/$" . scrumelo-new-story))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "localhost")
