@@ -18,6 +18,12 @@
 (defvar scrumelo-project-file "~/projects/scrumelo/aeos.org"
   "The file containing the scrum backlog.")
 
+(defvar scrumelo--base-dir
+  (if load-file-name
+      (directory-file-name load-file-name)
+    default-directory)
+  "The current directory.")
+
 (defvar scrumelo-bootstrap-css-location
   "http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/css/bootstrap-combined.no-icons.min.css"
   "The location of the twitter bootstrap CSS file.")
@@ -155,7 +161,8 @@
   (elnode-dispatcher
    httpcon
    `(("^/$" . scrumelo-backlog-page)
-     ("^/js/scrumelo.js" . ,(elnode-make-send-file "js/scrumelo.js"))
+     ("^/js/scrumelo.js" . ,(elnode-make-send-file
+                             (concat scrumelo--base-dir "js/scrumelo.js")))
      ("^/stories/new/$" . scrumelo-new-story))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "localhost")
