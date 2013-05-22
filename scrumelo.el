@@ -85,7 +85,9 @@
   (let ((state (org-entry-get (point) "TODO")))
     `(tr (td (i (@ (class ,(scrumelo--task-state-class state))) "")
              " " ,state)
-         (td ,(scrumelo--story)))))
+         (td (a (@ (id ,(org-id-get))
+                   (onclick "return get_story_info(this)"))
+                ,(scrumelo--story))))))
 
 (defun scrumelo--maybe-story-row ()
   "If looking at a top level heading, return a table row for it."
@@ -155,6 +157,25 @@
            (org-set-property "Necessity" necessity)
            (save-buffer))))
      (elnode-send-redirect httpcon "/"))))
+
+(defun scrumelo--send-json (httpcon obj)
+  "Respond to HTTPCON with OBJ converted to a json structure."
+  (elnode-http-start httpcon 200 '("Contaent-Type" . "text/json"))
+  (elnode-http-return httpcon (json-encode obj)))
+
+(defun scrumelo-story-json (httpcon)
+  "Repsond to HTTPCON with some json info about a story."
+  (let* ((story (match-string 1 (elnode-http-mapping httpcon)))
+         (buffer (find-file-noselect scrumelo-project-file))
+         (entry (cdr (org-id-find story))))
+    (message "HI: %s" story)
+    (with-current-buffer buffer
+      (goto-char entry)
+      (scrumelo--send-json
+       httpcon (list (cons 'Assignee (org-entry-get (point) "Assignee"))
+                     (cons 'content (buffer-substring-no-properties
+                                     (org-end-of-meta-data-and-drawers)
+                                     (org-entry-end-position))))))))
 
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
