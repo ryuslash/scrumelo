@@ -184,7 +184,8 @@
    `(("^/$" . scrumelo-backlog-page)
      ("^/js/scrumelo.js" . ,(elnode-make-send-file
                              (concat scrumelo--base-dir "js/scrumelo.js")))
-     ("^/stories/new/$" . scrumelo-new-story))))
+     ("^/stories/new/$" . scrumelo-new-story)
+     ("^/stories/\\([a-z0-9:-]+\\)/" . scrumelo-story-json))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "localhost")
 
