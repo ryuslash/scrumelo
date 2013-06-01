@@ -20,7 +20,7 @@
 
 (defvar scrumelo--base-dir
   (if load-file-name
-      (directory-file-name load-file-name)
+      (file-name-directory load-file-name)
     default-directory)
   "The current directory.")
 
