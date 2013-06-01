@@ -160,7 +160,7 @@
 
 (defun scrumelo--send-json (httpcon obj)
   "Respond to HTTPCON with OBJ converted to a json structure."
-  (elnode-http-start httpcon 200 '("Contaent-Type" . "text/json"))
+  (elnode-http-start httpcon 200 '("Content-Type" . "text/json"))
   (elnode-http-return httpcon (json-encode obj)))
 
 (defun scrumelo-story-json (httpcon)
@@ -168,7 +168,6 @@
   (let* ((story (match-string 1 (elnode-http-mapping httpcon)))
          (buffer (find-file-noselect scrumelo-project-file))
          (entry (cdr (org-id-find story))))
-    (message "HI: %s" story)
     (with-current-buffer buffer
       (goto-char entry)
       (scrumelo--send-json
@@ -185,7 +184,7 @@
      ("^/js/scrumelo.js" . ,(elnode-make-send-file
                              (concat scrumelo--base-dir "js/scrumelo.js")))
      ("^/stories/new/$" . scrumelo-new-story)
-     ("^/stories/\\([a-z0-9:-]+\\)/" . scrumelo-story-json))))
+     ("^/stories/\\([a-z0-9:-]+\\)/$" . scrumelo-story-json))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "localhost")
 
