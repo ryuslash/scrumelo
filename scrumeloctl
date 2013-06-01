@@ -1,0 +1,63 @@
+#!/bin/sh
+
+# Based on emacs-boot.sh by Nic Ferrier, as found here:
+# https://gist.github.com/nicferrier/5688473
+
+NAME=scrumelo
+CWD="$(cd $(dirname $0); pwd)"
+EMACSBIN=/usr/bin/emacs
+EMACSCLIENT="/usr/bin/emacsclient -s /tmp/emacs$UID/$NAME"
+EMACSD="$XDG_CONFIG_HOME"/emacs."$NAME".d
+[ -d "$EMACSD" ] || mkdir "$EMACSD"
+[ -f "$EMACSD"/init.el ] || cat <<EOF > "$EMACSD"/init.el
+(setq user-emacs-directory "$EMACSD")
+(setq package-archives
+      '(("gnu" . "http://elpa.gnu.org/packages/")
+        ("marmalade" . "http://marmalade-repo.org/packages/")))
+(package-initialize)
+(package-refresh-contents)
+(unless (package-installed-p 'elnode)
+  (package-install 'elnode))
+(unless (package-installed-p 'esxml)
+  (package-install 'esxml))
+EOF
+
+function report() {
+    if [ $? -eq 0 ]; then echo "$1"; else echo "$2"; fi
+}
+
+case "$1" in
+    start)
+        $EMACSBIN -Q --daemon=$NAME -l "$EMACSD"/init.el >/dev/null
+        if [ $? -eq 0 ]; then
+            $EMACSCLIENT -e "(load \"$CWD/scrumelo.el\")"
+            report Done "Failed: couldn't start elnode"
+        else
+            echo "Failed: Couldn't start daemon"
+        fi
+        ;;
+    status)
+        $EMACSCLIENT -e "(ignore)" 2>/dev/null >/dev/null
+        report Running... Stopped...
+        ;;
+    client)
+        $EMACSCLIENT -c
+        ;;
+    install)
+        shift
+        $EMACSCLIENT -e "(package-install (quote $1))"
+        ;;
+    reload)
+        $EMACSCLIENT -e "(load \"$CWD/scrumelo.el\")" >/dev/null
+        report Done Failed
+        ;;
+    stop)
+        $EMACSCLIENT -e "(kill-emacs)" 2>/dev/null >/dev/null
+        report Done Failed
+        ;;
+    *)
+        echo "Usage: $0 (start|status|client|reload|stop)"
+        echo "Or:    $0 install <module>"
+        exit 1
+        ;;
+esac

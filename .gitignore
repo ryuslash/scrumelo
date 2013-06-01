@@ -1,3 +1,5 @@
 *.org
 !README.org
 *.elc
+emacs.scrumelo.d/
+.emacs.desktop*
