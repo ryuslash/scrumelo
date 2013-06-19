@@ -1,4 +1,4 @@
-;;; scrumelo.el --- Scrum with elnode and org-mode
+;;; scrumelo.el --- Scrum with elnode and org-mode -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2013  Tom Willemse
 
@@ -9,6 +9,7 @@
 
 ;; A scrum web app.
 
+(require 'cl-lib)
 (require 'elnode)
 (require 'esxml)
 (require 'org)
@@ -40,13 +41,21 @@
   "http://code.jquery.com/jquery-2.0.0.min.js"
   "The location of the jQuery JS file.")
 
+(defvar scrumelo-react-js-location
+  "http://cdnjs.cloudflare.com/ajax/libs/react/0.3.2/react.min.js"
+  "The location of the React JS file.")
+
+(defvar scrumelo-jsxtransformer-js-location
+  "http://cdnjs.cloudflare.com/ajax/libs/react/0.3.2/JSXTransformer.js"
+  "The location of the JSX Transformer JS file.")
+
 (defmacro with-scrumelo-http-params (params httpcon &rest body)
   "Bind parameters PARAMS from HTTPCON and execute BODY."
+  (declare (indent 2))
   `(let (,@(mapcar (lambda (p)
                      `(,p (elnode-http-param ,httpcon ,(symbol-name p))))
                    params))
      ,@body))
-(put 'with-scrumelo-http-params 'lisp-indent-function 2)
 
 (defun scrumelo--css (href)
   "Return a link pointing to HREF."
@@ -66,83 +75,26 @@
   "Return a list of all required JS files."
   (list (scrumelo--js scrumelo-bootstrap-js-location)
         (scrumelo--js scrumelo-jquery-js-location)
+        (scrumelo--js scrumelo-react-js-location)
+        (scrumelo--js scrumelo-jsxtransformer-js-location)
         (scrumelo--js "js/scrumelo.js")))
-
-(defun scrumelo--story ()
-  "Return a description of the current org heading as a scrum story."
-  (format "As a %s, I %s to %s" (org-entry-get (point) "Role")
-          (org-entry-get (point) "Necessity")
-          (nth 4 (org-heading-components))))
-
-(defun scrumelo--task-state-class (state)
-  "Return the correct icon class for STATE."
-  (cdr (assoc state '(("TODO" . "icon-check-empty")
-                      ("DOING" . "icon-sign-blank")
-                      ("DONE" . "icon-check")))))
-
-(defun scrumelo--story-row ()
-  "Return a table row for the current org headline."
-  (let ((state (org-entry-get (point) "TODO")))
-    `(tr (td (i (@ (class ,(scrumelo--task-state-class state))) "")
-             " " ,state)
-         (td (a (@ (id ,(org-id-get))
-                   (onclick "return get_story_info(this)"))
-                ,(scrumelo--story))))))
-
-(defun scrumelo--maybe-story-row ()
-  "If looking at a top level heading, return a table row for it."
-  (when (= (car (org-heading-components)) 1)
-    (scrumelo--story-row)))
-
-(defun scrumelo--inner-story-table (buffer)
-  "Return the inner part of the story table for BUFFER."
-  (with-current-buffer buffer
-    (delq nil (org-map-entries
-               'scrumelo--maybe-story-row nil nil 'comment))))
-
-(defun scrumelo--story-table (buffer)
-  "Return the story table for BUFFER."
-  `(table (@ (class "table table-striped"))
-          ,@(scrumelo--inner-story-table buffer)))
-
-(defun scrumelo--new-story-form ()
-  "Create a form for adding new stories."
-  `(form (@ (method "POST")
-            (action "/stories/new/"))
-         (fieldset
-          (legend (@ (class "toggle")
-                     (data-show "new-story")) "New story")
-          (div (@ (id "new-story")
-                  (class "hide")
-                  (style "text-align: center;"))
-               (div (@ (class "input-prepend input-append"))
-                    (span (@ (class "add-on")) "As a ")
-                    (input (@ (class "input-medium") (type "text")
-                              (name "role")))
-                    (span (@ (class "add-on")) " I ")
-                    (input (@ (class "input-mini") (type "text")
-                              (name "necessity")))
-                    (span (@ (class "add-on")) " to ")
-                    (input (@ (class "input-xxlarge") (type "text")
-                              (name "headline")))
-                    (button (@ (class "btn") (type "submit")) "!"))))))
 
 (defun scrumelo-backlog-page (httpcon)
   "Send the backlog overview over HTTPCON."
-  (let ((buffer (find-file-noselect scrumelo-project-file)))
-    (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
-    (elnode-http-return
-     httpcon
-     (concat
-      "<!DOCTYPE html>\n"
-      (sxml-to-xml
-       `(html (head (title "Scrumelo")
-                    ,@(scrumelo--css-list)
-                    ,@(scrumelo--js-list))
-              (body
-               (div (@ (class "container"))
-                    ,(scrumelo--story-table buffer)
-                    ,(scrumelo--new-story-form)))))))))
+  (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
+  (elnode-http-return
+   httpcon
+   (concat
+    "<!DOCTYPE html>\n"
+    (sxml-to-xml
+     `(html (head (title "Scrumelo")
+                  ,@(scrumelo--css-list)
+                  ,@(scrumelo--js-list))
+            (body
+             (div (@ (class "container"))
+                  (h1 "Backlog")
+                  (div (@ (id "content")) "")
+                  (script (@ (type "text/jsx") (src "js/main.js")) ""))))))))
 
 (defun scrumelo-new-story (httpcon)
   "Parse data from HTTPCON and write a new scrum story using it."
@@ -176,17 +128,39 @@
                                      (org-end-of-meta-data-and-drawers)
                                      (org-entry-end-position))))))))
 
+(defun scrumelo--org-entry-to-list ()
+  "Turn an org-entry to json."
+  (let ((components (org-heading-components)))
+   (when (= (car components) 1)
+     `((:id . ,(org-id-get))
+       (:state . ,(org-entry-get (point) "TODO"))
+       (:role . ,(org-entry-get (point) "Role"))
+       (:necessity . ,(org-entry-get (point) "Necessity"))
+       (:title . ,(nth 4 components))))))
+
+(defun scrumelo-main-json (request)
+  "Respond to REQUEST with the json info for the main page."
+  (let ((buffer (find-file-noselect scrumelo-project-file)))
+    (with-current-buffer buffer
+      (scrumelo--send-json
+       request  (cl-map 'vector #'identity
+                        (delq nil
+                              (org-map-entries
+                               #'scrumelo--org-entry-to-list
+                               nil nil 'comment)))))))
+
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
   (elnode-dispatcher
    httpcon
    `(("^/$" . scrumelo-backlog-page)
-     ("^/js/scrumelo.js" . ,(elnode-make-send-file
-                             (concat scrumelo--base-dir "js/scrumelo.js")))
+     ("^/js/main.js" . ,(elnode-make-send-file
+                         (concat scrumelo--base-dir "js/main.js")))
+     ("^/stories/$" . scrumelo-main-json)
      ("^/stories/new/$" . scrumelo-new-story)
      ("^/stories/\\([a-z0-9:-]+\\)/$" . scrumelo-story-json))))
 
-(elnode-start 'scrumelo-handler :port 8028 :host "localhost")
+(elnode-start 'scrumelo-handler :port 8028 :host "0.0.0.0")
 
 (provide 'scrumelo)
 ;;; scrumelo.el ends here
