@@ -34,6 +34,10 @@ var StoryRow = React.createClass({
         return (
             <tr>
               <td>
+                <i class="icon-arrow-up" onClick={this.moveUp}></i>
+                <i class="icon-arrow-down" onClick={this.moveDown}></i>
+              </td>
+              <td>
                 <span onClick={this.changeState}>
                   <StateIcon state={this.state.state} />
                   {state}
@@ -78,6 +82,30 @@ var StoryRow = React.createClass({
                 this.setState({state: eval(data).state});
             }.bind(this)
         });
+    }),
+    moveUp: React.autoBind(function(event) {
+        $.ajax({
+            url: "/stories/up/",
+            type: "POST",
+            data: {'id': this.props.story.id},
+            dataType: 'json',
+            mimeType: 'textPlain',
+            success: function (data) {
+                this.props.onMoved(1);
+            }.bind(this)
+        });
+    }),
+    moveDown: React.autoBind(function(event) {
+        $.ajax({
+            url: "/stories/down/",
+            type: "POST",
+            data: {'id': this.props.story.id},
+            dataType: 'json',
+            mimeType: 'textPlain',
+            success: function (data) {
+                this.props.onMoved(-1);
+            }.bind(this)
+        });
     })
 });
 
@@ -101,10 +129,13 @@ var StoryTable = React.createClass({
             this.props.pollInterval
         );
     },
+    handleMoved: React.autoBind(function(direction) {
+        this.loadStoriesFromServer();
+    }),
     render: function() {
         var storyNodes = this.state.data.map(function (story) {
-            return <StoryRow story={story} />;
-        });
+            return <StoryRow story={story} onMoved={this.handleMoved} />;
+        }.bind(this));
         return (
             <table class="table table-striped">
               {storyNodes}

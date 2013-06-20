@@ -120,13 +120,30 @@
   (elnode-method httpcon
     (POST
      (with-scrumelo-http-params (id) httpcon
-       (message "HI: %s" id)
        (with-scrumelo-buffer
          (let ((entry (cdr (org-id-find id))))
            (goto-char entry)
            (org-todo)
+           (save-buffer)
            (scrumelo--send-json
-            httpcon (list (cons :state (org-entry-get (point) "TODO"))))))))))
+            httpcon
+            (list (cons :state (org-entry-get (point) "TODO"))))))))))
+
+(defun scrumelo-move-story (dir)
+  "Create a function to move a story in direction DIR."
+  (let ((func (intern (concat "org-move-subtree-" dir))))
+    (lambda (httpcon)
+      (elnode-method httpcon
+        (POST
+         (with-scrumelo-http-params (id) httpcon
+           (with-scrumelo-buffer
+             (let ((entry (cdr (org-id-find id))))
+               (goto-char entry)
+               (funcall func)
+               (save-buffer)
+               (scrumelo--send-json
+                httpcon
+                (list (cons :status "OK")))))))))))
 
 (defun scrumelo--send-json (httpcon obj)
   "Respond to HTTPCON with OBJ converted to a json structure."
@@ -175,6 +192,8 @@
      ("^/stories/$" . scrumelo-main-json)
      ("^/stories/new/$" . scrumelo-new-story)
      ("^/stories/state/$" . scrumelo-change-state)
+     ("^/stories/up/$" . ,(scrumelo-move-story "up"))
+     ("^/stories/down/$" . ,(scrumelo-move-story "down"))
      ("^/stories/\\([a-z0-9:-]+\\)/$" . scrumelo-story-json))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "0.0.0.0")
