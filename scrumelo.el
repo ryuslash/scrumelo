@@ -115,6 +115,19 @@
          (save-buffer)))
      (elnode-send-redirect httpcon "/"))))
 
+(defun scrumelo-change-state (httpcon)
+  "Parse data from HTTPCON and change the given task's state."
+  (elnode-method httpcon
+    (POST
+     (with-scrumelo-http-params (id) httpcon
+       (message "HI: %s" id)
+       (with-scrumelo-buffer
+         (let ((entry (cdr (org-id-find id))))
+           (goto-char entry)
+           (org-todo)
+           (scrumelo--send-json
+            httpcon (list (cons :state (org-entry-get (point) "TODO"))))))))))
+
 (defun scrumelo--send-json (httpcon obj)
   "Respond to HTTPCON with OBJ converted to a json structure."
   (elnode-http-start httpcon 200 '("Content-Type" . "text/json"))
@@ -161,6 +174,7 @@
                          (concat scrumelo--base-dir "js/main.js")))
      ("^/stories/$" . scrumelo-main-json)
      ("^/stories/new/$" . scrumelo-new-story)
+     ("^/stories/state/$" . scrumelo-change-state)
      ("^/stories/\\([a-z0-9:-]+\\)/$" . scrumelo-story-json))))
 
 (elnode-start 'scrumelo-handler :port 8028 :host "0.0.0.0")

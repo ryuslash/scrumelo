@@ -25,7 +25,7 @@ var StoryRow = React.createClass({
     render: function() {
         // A little ugly to get a space, but I don't know of any other
         // way.
-        var state = " " + this.props.story.state;
+        var state = " " + this.state.state;
         var sdata = null;
 
         if (this.state.content)
@@ -34,11 +34,13 @@ var StoryRow = React.createClass({
         return (
             <tr>
               <td>
-                <StateIcon state={this.props.story.state} />
-                {state}
+                <span onClick={this.changeState}>
+                  <StateIcon state={this.state.state} />
+                  {state}
+                </span>
               </td>
               <td>
-                <a id={this.props.story.id} onClick={this.handleClick}>
+                <a onClick={this.handleClick}>
                   As a {this.props.story.role}, I
                   {this.props.story.necessity} to
                   {this.props.story.title}
@@ -50,7 +52,8 @@ var StoryRow = React.createClass({
         );
     },
     getInitialState: function() {
-        return {content: null};
+        return {state: this.props.story.state,
+                content: null};
     },
     handleClick: React.autoBind(function(event) {
         if (!!this.state.content) {
@@ -63,6 +66,18 @@ var StoryRow = React.createClass({
               function (data, textStatus, jqXHR) {
                   self.setState({content: data});
               }, 'json');
+    }),
+    changeState: React.autoBind(function(event) {
+        $.ajax({
+            url: "/stories/state/",
+            type: "POST",
+            data: {'id': this.props.story.id},
+            dataType: 'json',
+            mimeType: 'textPlain',
+            success: function(data) {
+                this.setState({state: eval(data).state});
+            }.bind(this)
+        });
     })
 });
 
