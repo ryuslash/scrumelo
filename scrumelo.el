@@ -57,6 +57,12 @@
                    params))
      ,@body))
 
+(defmacro with-scrumelo-buffer (&rest body)
+  "Set the current buffer to `scrumelo-project-file' and run BODY."
+  (declare (indent 0))
+  `(with-current-buffer (find-file-noselect scrumelo-project-file)
+     ,@body))
+
 (defun scrumelo--css (href)
   "Return a link pointing to HREF."
   `(link (@ (href ,href) (rel "stylesheet") (type "text/css"))))
@@ -100,14 +106,13 @@
   "Parse data from HTTPCON and write a new scrum story using it."
   (elnode-method httpcon
     (POST
-     (let ((buffer (find-file-noselect scrumelo-project-file)))
-       (with-scrumelo-http-params (role necessity headline) httpcon
-         (with-current-buffer buffer
-           (goto-char (point-max))
-           (insert "\n* TODO " headline)
-           (org-set-property "Role" role)
-           (org-set-property "Necessity" necessity)
-           (save-buffer))))
+     (with-scrumelo-http-params (role necessity headline) httpcon
+       (with-scrumelo-buffer
+         (goto-char (point-max))
+         (insert "\n* TODO " headline)
+         (org-set-property "Role" role)
+         (org-set-property "Necessity" necessity)
+         (save-buffer)))
      (elnode-send-redirect httpcon "/"))))
 
 (defun scrumelo--send-json (httpcon obj)
@@ -118,9 +123,8 @@
 (defun scrumelo-story-json (httpcon)
   "Repsond to HTTPCON with some json info about a story."
   (let* ((story (match-string 1 (elnode-http-mapping httpcon)))
-         (buffer (find-file-noselect scrumelo-project-file))
          (entry (cdr (org-id-find story))))
-    (with-current-buffer buffer
+    (with-scrumelo-buffer
       (goto-char entry)
       (scrumelo--send-json
        httpcon (list (cons 'Assignee (org-entry-get (point) "Assignee"))
@@ -140,14 +144,13 @@
 
 (defun scrumelo-main-json (request)
   "Respond to REQUEST with the json info for the main page."
-  (let ((buffer (find-file-noselect scrumelo-project-file)))
-    (with-current-buffer buffer
-      (scrumelo--send-json
-       request  (cl-map 'vector #'identity
-                        (delq nil
-                              (org-map-entries
-                               #'scrumelo--org-entry-to-list
-                               nil nil 'comment)))))))
+  (with-scrumelo-buffer
+    (scrumelo--send-json
+     request  (cl-map 'vector #'identity
+                      (delq nil
+                            (org-map-entries
+                             #'scrumelo--org-entry-to-list
+                             nil nil 'comment))))))
 
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
