@@ -112,6 +112,7 @@
          (insert "\n* TODO " headline)
          (org-set-property "Role" role)
          (org-set-property "Necessity" necessity)
+         (org-set-property "ID" (org-id-new "scrumelo"))
          (save-buffer)))
      (elnode-send-redirect httpcon "/"))))
 
