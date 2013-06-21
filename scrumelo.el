@@ -14,6 +14,9 @@
 (require 'esxml)
 (require 'org)
 
+(eval-when-compile
+  (require 'cl-macs))
+
 ;;; Code:
 
 (defvar scrumelo-project-file "~/projects/scrumelo/aeos.org"
@@ -48,6 +51,20 @@
 (defvar scrumelo-jsxtransformer-js-location
   "http://cdnjs.cloudflare.com/ajax/libs/react/0.3.2/JSXTransformer.js"
   "The location of the JSX Transformer JS file.")
+
+(defmacro editing-scrumelo-story (id after &rest body)
+  "Edit the story with ID.
+
+Goto the story with ID and execute AFTER after executing BODY and
+saving the buffer."
+  (declare (indent 2))
+  (let ((entry-var (cl-gensym)))
+   `(with-scrumelo-buffer
+      (let ((,entry-var (cdr (org-id-find ,id))))
+        (goto-char ,entry-var)
+        ,@body
+        (save-buffer)
+        ,after))))
 
 (defmacro with-scrumelo-http-params (params httpcon &rest body)
   "Bind parameters PARAMS from HTTPCON and execute BODY."
@@ -121,14 +138,10 @@
   (elnode-method httpcon
     (POST
      (with-scrumelo-http-params (id) httpcon
-       (with-scrumelo-buffer
-         (let ((entry (cdr (org-id-find id))))
-           (goto-char entry)
-           (org-todo)
-           (save-buffer)
+       (editing-scrumelo-story id
            (scrumelo--send-json
-            httpcon
-            (list (cons :state (org-entry-get (point) "TODO"))))))))))
+            httpcon `((:state . ,(org-entry-get (point) "TODO"))))
+         (org-todo))))))
 
 (defun scrumelo-move-story (dir)
   "Create a function to move a story in direction DIR."
@@ -137,14 +150,9 @@
       (elnode-method httpcon
         (POST
          (with-scrumelo-http-params (id) httpcon
-           (with-scrumelo-buffer
-             (let ((entry (cdr (org-id-find id))))
-               (goto-char entry)
-               (funcall func)
-               (save-buffer)
-               (scrumelo--send-json
-                httpcon
-                (list (cons :status "OK")))))))))))
+           (editing-scrumelo-story id
+               (scrumelo--send-json httpcon '((:status . "OK")))
+             (funcall func))))))))
 
 (defun scrumelo--send-json (httpcon obj)
   "Respond to HTTPCON with OBJ converted to a json structure."
