@@ -23,6 +23,11 @@
 (defvar scrumelo-project-file "~/projects/scrumelo/aeos.org"
   "The file containing the scrum backlog.")
 
+(defvar scrumelo-host "http://localhost:8028"
+  "The URL on which scrumelo is running.
+
+Mozilla persona uses this to verify login requests.")
+
 (defvar scrumelo--base-dir
   (if load-file-name
       (file-name-directory load-file-name)
@@ -261,7 +266,7 @@ saving the buffer."
                                   (value ""))))
                   (p (a (@ (href "javascript:login()")) "Login"))))))))
       (POST
-       (let* ((audience "http://localhost:8028")
+       (let* ((audience scrumelo-host)
               (assertion (elnode-http-param httpcon "assertion"))
               (result (scrumelo--verify-credentials audience assertion)))
          (if (equal (cdr (assoc 'status result)) "okay")
