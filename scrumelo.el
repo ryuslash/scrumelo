@@ -10,6 +10,7 @@
 ;; A scrum web app.
 
 (require 'cl-lib)
+(require 'eieio)
 (require 'elnode)
 (require 'esxml)
 (require 'org)
@@ -52,6 +53,17 @@
   "http://cdnjs.cloudflare.com/ajax/libs/react/0.3.2/JSXTransformer.js"
   "The location of the JSX Transformer JS file.")
 
+(defvar scrumelo--sessions
+  (make-hash-table :test 'equal :size 6)
+  "Collection of session information.")
+
+(defclass scrumelo-session ()
+  ((email :accessor session-email)
+   (audience :accessor session-audience)
+   (expires :accessor session-expires)
+   (issuer :accessor session-issuer)
+   (status)))
+
 (defmacro editing-scrumelo-story (id after &rest body)
   "Edit the story with ID.
 
@@ -80,6 +92,14 @@ saving the buffer."
   `(with-current-buffer (find-file-noselect scrumelo-project-file)
      ,@body))
 
+(defun scrumelo--json-to-session (persona-json)
+  "Turn PERSONA-JSON into a `scrumelo-session' object."
+  (let ((session (scrumelo-session "session")))
+    (mapc (lambda (cns)
+            (setf (slot-value session (car cns)) (cdr cns)))
+          persona-json)
+    session))
+
 (defun scrumelo--css (href)
   "Return a link pointing to HREF."
   `(link (@ (href ,href) (rel "stylesheet") (type "text/css"))))
@@ -102,22 +122,30 @@ saving the buffer."
         (scrumelo--js scrumelo-jsxtransformer-js-location)
         (scrumelo--js "js/scrumelo.js")))
 
+(defun scrumelo--logged-in-p (httpcon)
+  "Check if the session on HTTPCON is logged-in."
+  (gethash (elnode-http-cookie httpcon "sessionid" t)
+           scrumelo--sessions))
+
 (defun scrumelo-backlog-page (httpcon)
   "Send the backlog overview over HTTPCON."
-  (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
-  (elnode-http-return
-   httpcon
-   (concat
-    "<!DOCTYPE html>\n"
-    (sxml-to-xml
-     `(html (head (title "Scrumelo")
-                  ,@(scrumelo--css-list)
-                  ,@(scrumelo--js-list))
-            (body
-             (div (@ (class "container"))
-                  (h1 "Backlog")
-                  (div (@ (id "content")) "")
-                  (script (@ (type "text/jsx") (src "js/main.js")) ""))))))))
+  (if (not (scrumelo--logged-in-p httpcon))
+      (elnode-send-redirect httpcon "/login")
+    (elnode-send-html
+     httpcon
+     (concat
+      "<!DOCTYPE html>\n"
+      (sxml-to-xml
+       `(html (head (title "Scrumelo")
+                    ,@(scrumelo--css-list)
+                    ,@(scrumelo--js-list))
+              (body
+               (a (@ (href "/logout")) "Logout")
+               (div (@ (class "container"))
+                    (h1 "Backlog")
+                    (div (@ (id "content")) "")
+                    (script (@ (type "text/jsx")
+                               (src "js/main.js")) "")))))))))
 
 (defun scrumelo-new-story (httpcon)
   "Parse data from HTTPCON and write a new scrum story using it."
@@ -208,39 +236,46 @@ saving the buffer."
 
 (defun scrumelo-login-page (httpcon)
   "Show a login link for persona for HTTPCON."
-  (elnode-method httpcon
-    (GET
-     (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
-     (elnode-http-return
-      httpcon
-      (concat
-       "<!DOCTYPE html>\n"
-       (sxml-to-xml
-        '(html (@ (lang "en"))
-               (head (meta (@ (charset "utf-8")))
-                     (title "Login")
-                     (script (@ (src "https://login.persona.org/include.js")) "")
-                     (script (@ (src "/js/login.js")) ""))
-               (body
-                (form (@ (id "login-form")
-                         (method "POST")
-                         (action ""))
-                      (input (@ (id "assertion-field")
-                                (type "hidden")
-                                (name "assertion")
-                                (value ""))))
-                (p (a (@ (href "javascript:login()")) "Login"))))))))
-    (POST
-     (let* ((audience "http://localhost:8028")
-            (assertion (elnode-http-param httpcon "assertion"))
-            (result (scrumelo--verify-credentials audience assertion)))
-       (if (equal (cdr (assoc 'status result)) "okay")
-           (progn
-             (elnode-http-start httpcon 302
-                                '("Content-Type" . "text/html")
-                                '("Location" . "/"))
-             (elnode-send-redirect httpcon "/"))
-         (elnode-send-status httpcon 403 "Not allowed"))))))
+  (if (scrumelo--logged-in-p httpcon)
+      (elnode-send-redirect httpcon "/")
+    (elnode-method httpcon
+      (GET
+       (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
+       (elnode-http-return
+        httpcon
+        (concat
+         "<!DOCTYPE html>\n"
+         (sxml-to-xml
+          '(html (@ (lang "en"))
+                 (head (meta (@ (charset "utf-8")))
+                       (title "Login")
+                       (script (@ (src "https://login.persona.org/include.js")) "")
+                       (script (@ (src "/js/login.js")) ""))
+                 (body
+                  (form (@ (id "login-form")
+                           (method "POST")
+                           (action ""))
+                        (input (@ (id "assertion-field")
+                                  (type "hidden")
+                                  (name "assertion")
+                                  (value ""))))
+                  (p (a (@ (href "javascript:login()")) "Login"))))))))
+      (POST
+       (let* ((audience "http://localhost:8028")
+              (assertion (elnode-http-param httpcon "assertion"))
+              (result (scrumelo--verify-credentials audience assertion)))
+         (if (equal (cdr (assoc 'status result)) "okay")
+             (progn
+               (puthash (elnode-http-cookie httpcon "sessionid" t)
+                        (scrumelo--json-to-session result)
+                        scrumelo--sessions)
+               (elnode-send-redirect httpcon "/"))
+           (elnode-send-status httpcon 403 "Not allowed")))))))
+
+(defun scrumelo-logout (httpcon)
+  "Destroy the session on HTTPCON."
+  (remhash (elnode-http-cookie httpcon "sessionid" t) scrumelo--sessions)
+  (elnode-send-redirect httpcon "/login"))
 
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
@@ -252,6 +287,7 @@ saving the buffer."
      ("^/js/login.js" . ,(elnode-make-send-file
                           (concat scrumelo--base-dir "js/login.js")))
      ("^/login/$" . scrumelo-login-page)
+     ("^/logout/$" . scrumelo-logout)
      ("^/stories/$" . scrumelo-main-json)
      ("^/stories/new/$" . scrumelo-new-story)
      ("^/stories/state/$" . scrumelo-change-state)
