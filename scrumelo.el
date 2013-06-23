@@ -191,6 +191,57 @@ saving the buffer."
                              #'scrumelo--org-entry-to-list
                              nil nil 'comment))))))
 
+(defun scrumelo--verify-credentials (audience assertion)
+  "Make sure AUDIENCE and ASSERTION are correct."
+  (let ((url-request-extra-headers '(("Content-Type" . "application/json")))
+        (url-request-data (json-encode `(("assertion" . ,assertion)
+                                         ("audience" . ,audience))))
+        (url-request-method "POST")
+        result)
+    (with-current-buffer
+        (url-retrieve-synchronously "https://verifier.login.persona.org/verify")
+      (goto-char (point-min))
+      (search-forward "\n\n")
+      (setq result (json-read))
+      (kill-buffer))
+    result))
+
+(defun scrumelo-login-page (httpcon)
+  "Show a login link for persona for HTTPCON."
+  (elnode-method httpcon
+    (GET
+     (elnode-http-start httpcon 200 '("Content-Type" . "text/html"))
+     (elnode-http-return
+      httpcon
+      (concat
+       "<!DOCTYPE html>\n"
+       (sxml-to-xml
+        '(html (@ (lang "en"))
+               (head (meta (@ (charset "utf-8")))
+                     (title "Login")
+                     (script (@ (src "https://login.persona.org/include.js")) "")
+                     (script (@ (src "/js/login.js")) ""))
+               (body
+                (form (@ (id "login-form")
+                         (method "POST")
+                         (action ""))
+                      (input (@ (id "assertion-field")
+                                (type "hidden")
+                                (name "assertion")
+                                (value ""))))
+                (p (a (@ (href "javascript:login()")) "Login"))))))))
+    (POST
+     (let* ((audience "http://localhost:8028")
+            (assertion (elnode-http-param httpcon "assertion"))
+            (result (scrumelo--verify-credentials audience assertion)))
+       (if (equal (cdr (assoc 'status result)) "okay")
+           (progn
+             (elnode-http-start httpcon 302
+                                '("Content-Type" . "text/html")
+                                '("Location" . "/"))
+             (elnode-send-redirect httpcon "/"))
+         (elnode-send-status httpcon 403 "Not allowed"))))))
+
 (defun scrumelo-handler (httpcon)
   "Send the right requests in HTTPCON to the right functions."
   (elnode-dispatcher
@@ -198,6 +249,9 @@ saving the buffer."
    `(("^/$" . scrumelo-backlog-page)
      ("^/js/main.js" . ,(elnode-make-send-file
                          (concat scrumelo--base-dir "js/main.js")))
+     ("^/js/login.js" . ,(elnode-make-send-file
+                          (concat scrumelo--base-dir "js/login.js")))
+     ("^/login/$" . scrumelo-login-page)
      ("^/stories/$" . scrumelo-main-json)
      ("^/stories/new/$" . scrumelo-new-story)
      ("^/stories/state/$" . scrumelo-change-state)
